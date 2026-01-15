@@ -1,8 +1,8 @@
 # BlindType
 
-This branch of the repository contains only the index.html file to execute the app in github pages.
+A distraction-free, time-locked writing tool.
 
-
-
-
-
+## Architecture
+- Vanilla JavaScript
+- Client-side time-locking
+- No backend, no storage

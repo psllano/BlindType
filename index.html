@@ -94,6 +94,9 @@
         <button id="startBtn" class="btn">Start</button>
         <button id="stopBtn" class="btn ghost" style="display:none">Stop</button>
         <button id="saveBtn" class="btn">Save now</button>
+        <button id="unlockBtn" class="btn">Unlock now</button>
+          <input id="fileInput" type="file" accept=".blind,application/json" style="display:none" />
+
       </div>
     </header>
     <div class="stage">
@@ -326,6 +329,68 @@ function saveLockedFile(){
 }
 
 saveBtn.addEventListener('click',saveLockedFile);
+
+// Unlock: read a .blind file, check unlock date, and if passed, decode and offer download
+const readBtn = document.getElementById('unlockBtn');
+const fileInput = document.getElementById('fileInput');
+
+readBtn.addEventListener('click', () => {
+  fileInput.value = '';
+  fileInput.click();
+});
+
+fileInput.addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  try {
+    const text = await file.text();
+    const payload = JSON.parse(text);
+
+    // Validaciones básicas
+    if (!payload.unlock_date || !payload.content_b64) {
+      alert('Invalid .blind file');
+      return;
+    }
+
+    const today = new Date();
+    const unlockDate = new Date(payload.unlock_date + 'T00:00:00');
+
+    if (today < unlockDate) {
+      alert(`This file is locked until ${payload.unlock_date}`);
+      return;
+    }
+
+    // Decodificar contenido
+    const decoded = decodeURIComponent(
+      escape(atob(payload.content_b64))
+    );
+
+    downloadTxt(decoded, payload.title || 'blindtype');
+
+  } catch (err) {
+    console.error(err);
+    alert('Error reading file');
+  }
+});
+
+function downloadTxt(content, title) {
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+
+  const safeTitle = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_|_$/g, '');
+
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${safeTitle || 'blindtype'}.txt`;
+  link.click();
+
+  URL.revokeObjectURL(url);
+}
+
 
 // ensure the invisible capture is focused on load
 window.addEventListener('load',()=>{capture.focus();});
