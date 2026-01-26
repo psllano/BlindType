@@ -93,9 +93,16 @@
 
         <button id="startBtn" class="btn">Start</button>
         <button id="stopBtn" class="btn ghost" style="display:none">Stop</button>
-        <button id="saveBtn" class="btn">Save now</button>
-        <button id="unlockBtn" class="btn">Unlock now</button>
-          <input id="fileInput" type="file" accept=".blind,application/json" style="display:none" />
+        <button id="saveBtn" class="btn">Save blind file</button>
+        <button id="unlockBtn" class="btn">Unlock file/folder</button>
+          <input
+        id="fileInput"
+        type="file"
+        accept=".blind,application/json"
+        webkitdirectory
+        multiple
+        style="display:none"
+      />
 
       </div>
     </header>
@@ -293,7 +300,6 @@ function renderLines(cursorPos = currentLine.length) {
 }
 
 
-
 // Save: create a small JSON "locked" file that contains unlock_date and base64 content
 function saveLockedFile(){
   const unlock = unlockDateInput.value;
@@ -311,12 +317,12 @@ function saveLockedFile(){
     version: 1,
     title: title.value || 'Untitled',
     created: new Date().toISOString(),
-    unlock_date: unlock,
+    unlock_date: btoa(unescape(encodeURIComponent(unlock))),
     content_b64: btoa(unescape(encodeURIComponent(full)))
   };
 
   const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
-  const name = `blindtype_${new Date().toISOString().replace(/[:.]/g,'-')}.blind`;
+  const name = `${title.value.replace(/[:.]/g,'-') || 'Untitled'}_${unlock.replace(/[:.]/g,'-')}.blind`;
   const url = URL.createObjectURL(blob);
 
   // Safari-safe method: create a temporary visible link and require user click
@@ -330,65 +336,76 @@ function saveLockedFile(){
 
 saveBtn.addEventListener('click',saveLockedFile);
 
-// Unlock: read a .blind file, check unlock date, and if passed, decode and offer download
-const readBtn = document.getElementById('unlockBtn');
+// Unlock: read a .blind file/folder, check unlock date, and if passed, decode and offer download
+const unlockBtn = document.getElementById('unlockBtn');
 const fileInput = document.getElementById('fileInput');
 
-readBtn.addEventListener('click', () => {
-  fileInput.value = '';
-  fileInput.click();
-});
+unlockBtn.onclick=()=>{ fileInput.value=''; fileInput.click(); };
 
-fileInput.addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
+fileInput.addEventListener('change', async (e)=>{
+  const files=[...e.target.files];
+  const today=new Date();
+  const unlocked=[];
 
-  try {
-    const text = await file.text();
-    const payload = JSON.parse(text);
+  for(const file of files){
+    if(!file.name.endsWith('.blind')) continue;
+    try{
+      const payload=JSON.parse(await file.text());
+      if(!payload.content_b64||!payload.unlock_date) continue;
 
-    // Validaciones básicas
-    if (!payload.unlock_date || !payload.content_b64) {
-      alert('Invalid .blind file');
-      return;
-    }
+      const unlockDate=new Date(decodeURIComponent(escape(atob(payload.unlock_date)))+'T00:00:00');
+      if(today<unlockDate) continue;
 
-    const today = new Date();
-    const unlockDate = new Date(payload.unlock_date + 'T00:00:00');
-
-    if (today < unlockDate) {
-      alert(`This file is locked until ${payload.unlock_date}`);
-      return;
-    }
-
-    // Decodificar contenido
-    const decoded = decodeURIComponent(
-      escape(atob(payload.content_b64))
-    );
-
-    downloadTxt(decoded, payload.title || 'blindtype');
-
-  } catch (err) {
-    console.error(err);
-    alert('Error reading file');
+      unlocked.push({
+        title: payload.title || '',
+        created: payload.created,
+        content: decodeURIComponent(escape(atob(payload.content_b64))).trim()
+      });
+    }catch{}
   }
+
+  if(!unlocked.length){
+    alert('No unlocked texts found.');
+    return;
+  }
+
+  // ordenar por fecha
+  unlocked.sort((a,b)=>new Date(a.created)-new Date(b.created));
+
+  const txt=buildLiteraryTxt(unlocked);
+  downloadMergedTxt(txt);
 });
 
-function downloadTxt(content, title) {
-  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
+/* ===============================
+   FORMATO AMIGABLE
+================================ */
+function buildLiteraryTxt(texts){
+  return texts.map(t=>{
+    const date = t.created
+      ? new Date(t.created).toLocaleDateString('en-GB',{
+          day:'numeric', month:'long', year:'numeric'
+        })
+      : '';
 
-  const safeTitle = title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_|_$/g, '');
+    const title = t.title || 'Untitled';
+    const underline = '─'.repeat(title.length);
 
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `${safeTitle || 'blindtype'}.txt`;
+    return `${title}
+${underline}
+${date ? '('+date+')' : ''}
+
+${t.content}
+
+\n\n— — —\n\n`;
+  }).join('').trim();
+}
+
+function downloadMergedTxt(content){
+  const blob=new Blob([content],{type:'text/plain;charset=utf-8'});
+  const link=document.createElement('a');
+  link.href=URL.createObjectURL(blob);
+  link.download='blindtype_unlocked.txt';
   link.click();
-
-  URL.revokeObjectURL(url);
 }
 
 
