@@ -321,8 +321,13 @@ function saveLockedFile(){
     content_b64: btoa(unescape(encodeURIComponent(full)))
   };
 
+  const safeTitle = payload.title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_|_$/g, '');
+
   const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
-  const name = `${title.value.replace(/[:.]/g,'-') || 'Untitled'}_${unlock.replace(/[:.]/g,'-')}.blind`;
+  const name = `${safeTitle}_${unlock.replace(/[:.]/g,'-')}.blind`;
   const url = URL.createObjectURL(blob);
 
   // Safari-safe method: create a temporary visible link and require user click
